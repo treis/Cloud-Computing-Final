@@ -3,3 +3,9 @@
 # azure-monitor-opentelemetry
 
 azure-functions
+azure-keyvault-secrets
+azure-identity
+pyodbc
+fastapi
+uvicorn[standard]
+pydantic
