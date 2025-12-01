@@ -1,88 +1,158 @@
 import os
-from dotenv import load_dotenv
-
-load_dotenv() # load environment variable that has connection string to SQL server
-
-import azure.functions as func
+import json
 import logging
-
-app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
-
+import pyodbc
+import azure.functions as func
 from azure.keyvault.secrets import SecretClient
 from azure.identity import DefaultAzureCredential
 
-credential = DefaultAzureCredential()
-client = SecretClient(vault_url=os.getenv("VAULT_URL"), credential=credential)
-
-# Fetch the secret
-retrieved_secret = client.get_secret("apikey")  # Name of the secret in Key Vault
-api_key = retrieved_secret.value
-
-# Set up azure server enviroment and make the necessary singular SQL table that will be needed to do CRUD operations
-
-import pyodbc
-
-try: 
-    db_connection_string = os.getenv("AZURE_SQL_CONNECTIONSTRING")
-    conn = pyodbc.connect(db_connection_string)
-except Exception as e: 
-    print(f"Error: {str(e)}")
-
+# Setup Azure SQL Server connection
+db_connection_string = os.getenv("AZURE_SQL_CONNECTIONSTRING")
+conn = pyodbc.connect(db_connection_string)
 cursor = conn.cursor()
 
-create_table_query = """
-    CREATE TABLE Products (
-        ProductID INT PRIMARY KEY IDENTITY(1,1),  -- Auto-increment primary key
-        ProductName NVARCHAR(100) NOT NULL,         -- Product name (can't be NULL)
-        Category NVARCHAR(50),                     -- Category of the product
-        Price DECIMAL(10, 2),                      -- Price of the product with two decimal places
-        StockQuantity INT,                         -- Quantity of product in stock
-        DateAdded DATETIME DEFAULT GETDATE()       -- Date when the product was added (defaults to current date)
+# Setup Azure Key Vault to retrieve the API Key
+vault_url = "https://ccfinalkeyvault.vault.azure.net/"
+credential = DefaultAzureCredential()
+client = SecretClient(vault_url=vault_url, credential=credential)
+valid_api_key = client.get_secret("ApiKey").value  # Fetch the secret value
+
+# Create table if it does not exist in the SQL Server database
+cursor.execute('''
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='products' AND xtype='U')
+    CREATE TABLE products (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        name NVARCHAR(100) NOT NULL,
+        price DECIMAL(10, 2) NOT NULL
     );
+''')
+conn.commit()
 
-    """
-cursor.execute(create_table_query)
+# Helper functions
+def verify_authority(key: str) -> bool:
+    """Verify if the provided API key matches the stored API key"""
+    return key == valid_api_key
 
-# Helper for authorizing CRUD operations
-
-def authorization(api_key_attempt):
-    if api_key_attempt == retrieved_secret: 
+def has_body(request: func.HttpRequest) -> bool:
+    """Check if the request has a valid JSON body"""
+    try:
+        request.get_json()
         return True
-    else: 
+    except ValueError:
         return False
 
-@app.route(route="http_trigger")
-def http_trigger(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info('Python HTTP trigger function processed a request.')
+def prepare_data(provided_data: list):
+    """Prepare the result data for JSON response"""
+    master_list = []
+    for item_tuple in provided_data:
+        id = item_tuple[0]
+        name = item_tuple[1]
+        price = item_tuple[2]
+        master_list.append({'id': id, 'name': name, 'price': price})
+    return master_list
 
-    name = req.params.get('name')
-    if not name:
-        try:
-            req_body = req.get_json()
-        except ValueError:
-            pass
-        else:
-            name = req_body.get('name')
+def json_response(payload: dict, status_code: int):
+    """Format the response as JSON"""
+    return func.HttpResponse(
+        json.dumps(payload),
+        status_code=status_code,
+        mimetype="application/json"
+    )
 
-    if name:
-        return func.HttpResponse(f"Hello, {name}. This HTTP triggered function executed successfully.")
-    else:
-        return func.HttpResponse(
-             "This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response.",
-            status_code=200
-        )
+# CREATE
+@app.route(route="create_item")
+def create_item(req: func.HttpRequest) -> func.HttpResponse:
+    provided_key = req.headers.get('api_key')
+    if not verify_authority(provided_key):
+        return json_response({"error": "Unauthorized access"}, 401)
     
-@app.route(route="check_access")
-def check_access(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info('Python HTTP trigger function processed a request.')
+    if not has_body(req):
+        return json_response({"error": "Bad request"}, 400)
+    
+    req_body = req.get_json()
+    name = req_body.get('name')
+    price = req_body.get('price')
 
-    api_key_attempt = req.params.get('apikey')
-
-    if not authorization(api_key_attempt=api_key_attempt):
-        return func.HttpResponse(
-             "User not authorized.",
-             status_code=401
-        )
-
+    if name and price:
+        cursor.execute("INSERT INTO products (name, price) VALUES (?, ?)", (name, price))
+        conn.commit()
+        new_id = cursor.lastrowid
+        logging.info(f"CREATE request successful. Item added to database.")
+        return json_response({
+            "message": "Item created",
+            "id": new_id,
+            "name": name,
+            "price": price
+        }, 201)
     else:
-        return func.HttpResponse(f"Hello, this HTTP triggered function executed successfully. You are authorized.")
+        return json_response({"error": "Bad request"}, 400)
+
+# UPDATE
+@app.route(route="update_item")
+def update_item(req: func.HttpRequest) -> func.HttpResponse:
+    provided_key = req.headers.get('api_key')
+    if not verify_authority(provided_key):
+        return json_response({"error": "Unauthorized access"}, 401)
+    
+    if not has_body(req):
+        return json_response({"error": "Bad request"}, 400)
+
+    req_body = req.get_json()
+    name = req_body.get('name')
+    price = req_body.get('price')
+    provided_id = req_body.get('id')
+
+    if name and price and provided_id:
+        try:
+            cursor.execute('''
+                UPDATE products
+                SET name = ?, price = ?
+                WHERE id = ?
+            ''', (name, price, provided_id))
+            conn.commit()
+            return json_response({
+                "message": "Item updated",
+                "id": provided_id,
+                "name": name,
+                "price": price
+            }, 200)
+        except pyodbc.Error as e:
+            return json_response({"error": str(e)}, 400)
+    else:
+        return json_response({"error": "Bad request"}, 400)
+
+# DELETE
+@app.route(route="delete_item")
+def delete_item(req: func.HttpRequest) -> func.HttpResponse:
+    provided_key = req.headers.get('api_key')
+    if not verify_authority(provided_key):
+        return json_response({"error": "Unauthorized access"}, 401)
+    
+    if not has_body(req):
+        return json_response({"error": "Bad request"}, 400)
+
+    req_body = req.get_json()
+    provided_id = req_body.get('id')
+
+    if provided_id:
+        try:
+            cursor.execute('DELETE FROM products WHERE id = ?', (provided_id,))
+            conn.commit()
+            return json_response({"message": "Item deleted", "id": provided_id}, 200)
+        except pyodbc.Error as e:
+            return json_response({"error": str(e)}, 400)
+    else:
+        return json_response({"error": "Bad request"}, 400)
+
+# READ
+@app.route(route="read_item")
+def read_item(req: func.HttpRequest) -> func.HttpResponse:
+    provided_key = req.headers.get('api_key')
+    if not verify_authority(provided_key):
+        return json_response({"error": "Unauthorized access"}, 401)
+    
+    cursor.execute("SELECT * FROM products ORDER BY id")
+    unprocessed_data = cursor.fetchall()
+    output = prepare_data(unprocessed_data)
+    logging.info(f"Current list of items: {output}")
+    return json_response({"items": output}, 200)
