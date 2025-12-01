@@ -6,6 +6,9 @@ import azure.functions as func
 from azure.keyvault.secrets import SecretClient
 from azure.identity import DefaultAzureCredential
 
+# Set up function app variable
+app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
+
 # Setup Azure SQL Server connection
 db_connection_string = os.getenv("AZURE_SQL_CONNECTIONSTRING")
 conn = pyodbc.connect(db_connection_string)
@@ -76,7 +79,6 @@ def create_item(req: func.HttpRequest) -> func.HttpResponse:
     if name and price:
         cursor.execute("INSERT INTO products (name, price) VALUES (?, ?)", (name, price))
         conn.commit()
-        new_id = cursor.lastrowid
         logging.info(f"CREATE request successful. Item added to database.")
         return json_response({
             "message": "Item created",
