@@ -9,3 +9,5 @@ pyodbc
 fastapi
 uvicorn[standard]
 pydantic
+azure-mgmt-applicationinsights
+
