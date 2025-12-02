@@ -63,7 +63,7 @@ def json_response(payload: dict, status_code: int):
     )
 
 # CREATE
-@app.route(route="create_item")
+@app.route(route="api/product/create")
 def create_item(req: func.HttpRequest) -> func.HttpResponse:
     provided_key = req.headers.get('api_key')
     if not verify_authority(provided_key):
@@ -90,7 +90,7 @@ def create_item(req: func.HttpRequest) -> func.HttpResponse:
         return json_response({"error": "Bad request"}, 400)
 
 # UPDATE
-@app.route(route="update_item")
+@app.route(route="api/product/update")
 def update_item(req: func.HttpRequest) -> func.HttpResponse:
     provided_key = req.headers.get('api_key')
     if not verify_authority(provided_key):
@@ -124,7 +124,7 @@ def update_item(req: func.HttpRequest) -> func.HttpResponse:
         return json_response({"error": "Bad request"}, 400)
 
 # DELETE
-@app.route(route="delete_item")
+@app.route(route="api/product/delete")
 def delete_item(req: func.HttpRequest) -> func.HttpResponse:
     provided_key = req.headers.get('api_key')
     if not verify_authority(provided_key):
@@ -147,7 +147,7 @@ def delete_item(req: func.HttpRequest) -> func.HttpResponse:
         return json_response({"error": "Bad request"}, 400)
 
 # READ
-@app.route(route="read_item")
+@app.route(route="api/product/read")
 def read_item(req: func.HttpRequest) -> func.HttpResponse:
     provided_key = req.headers.get('api_key')
     if not verify_authority(provided_key):
@@ -158,3 +158,46 @@ def read_item(req: func.HttpRequest) -> func.HttpResponse:
     output = prepare_data(unprocessed_data)
     logging.info(f"Current list of items: {output}")
     return json_response({"items": output}, 200)
+
+# VERIFY 
+
+@app.route(route="api/product/verify")
+def verify_items(req: func.HttpRequest) -> func.HttpResponse:
+    provided_key = req.headers.get('api_key')
+    if not verify_authority(provided_key):
+        return json_response({"error": "Unauthorized access"}, 401)
+
+    try:
+        cursor.execute("SELECT id, name, price FROM products ORDER BY id")
+        rows = cursor.fetchall()
+
+        all_valid = True
+        issues = []
+
+        for row in rows:
+            record_issues = {}
+
+            # Check each required field
+            if row[0] is None:
+                record_issues["id"] = "Missing"
+            if row[1] is None or row[1] == "":
+                record_issues["name"] = "Missing or empty"
+            if row[2] is None:
+                record_issues["price"] = "Missing"
+
+            # If issues detected for this row, record them
+            if record_issues:
+                all_valid = False
+                issues.append({
+                    "id": row[0],
+                    "problems": record_issues
+                })
+
+        return json_response({
+            "all_items_valid": all_valid,
+            "total_items": len(rows),
+            "issues": issues
+        }, 200)
+
+    except pyodbc.Error as e:
+        return json_response({"error": str(e)}, 400)
