@@ -6,39 +6,76 @@ import azure.functions as func
 from azure.keyvault.secrets import SecretClient
 from azure.identity import DefaultAzureCredential
 
-
+# -----------------------------------------
+# Function App Setup
+# -----------------------------------------
 app = func.FunctionApp()
 
-def get_kv_api_key():
-    vault_url = "https://ccfinalkv.vault.azure.net/"
-    credential = DefaultAzureCredential(
-    managed_identity_client_id='0d12f0b9-7f4d-44e4-bbb5-eb76117b9340'
-)
+# -----------------------------------------
+# Helpers
+# -----------------------------------------
+# Use your user-assigned managed identity client ID
+USER_ASSIGNED_MI_CLIENT_ID = '0d12f0b9-7f4d-44e4-bbb5-eb76117b9340'
 
+def get_kv_api_key():
+    """
+    Retrieves the API key from Azure Key Vault using a managed identity.
+    """
+    vault_url = "https://ccfinalkv.vault.azure.net/"
+    credential = DefaultAzureCredential(managed_identity_client_id=USER_ASSIGNED_MI_CLIENT_ID)
     client = SecretClient(vault_url=vault_url, credential=credential)
     return client.get_secret("apikey").value
 
 
 def verify_authority(req: func.HttpRequest) -> bool:
+    """
+    Verifies the request's API key header against the Key Vault key.
+    """
     provided_key = req.headers.get("api_key")
     valid_api_key = get_kv_api_key()
     return provided_key == valid_api_key
 
 
 def json_response(payload: dict, status=200):
+    """
+    Standard JSON HTTP response.
+    """
     return func.HttpResponse(
         json.dumps(payload),
         status_code=status,
         mimetype="application/json"
     )
 
-
 def get_connection():
-    conn_str = os.getenv("AZURE_SQL_CONNECTIONSTRING")
-    return pyodbc.connect(conn_str)
+    """
+    Connects to Azure SQL Database using user-assigned Managed Identity.
+    """
+    server = "ccfinaldb.database.windows.net"
+    database = "product"
+
+    try:
+        # Acquire Azure AD token using user-assigned Managed Identity
+        credential = DefaultAzureCredential(managed_identity_client_id=USER_ASSIGNED_MI_CLIENT_ID)
+        vault_url = "https://ccfinalkv.vault.azure.net/"
+        client = SecretClient(vault_url=vault_url, credential=credential)
+        sql_password = client.get_secret("sqlkey").value
+
+        # ODBC connection string for ActiveDirectoryAccessToken
+        conn_str = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:ccfinaldb.database.windows.net,1433;Database=product;Uid=CloudSA1b36c136;" + f"Pwd={sql_password}" + ";Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+
+        return pyodbc.connect(conn_str)
+
+    except pyodbc.Error as e:
+        logging.error(f"SQL Connection failed: {e}")
+        raise
+
+
 
 
 def ensure_table_exists(cursor):
+    """
+    Ensures the 'products' table exists.
+    """
     cursor.execute("""
         IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='products' AND xtype='U')
         CREATE TABLE products (
@@ -49,6 +86,10 @@ def ensure_table_exists(cursor):
     """)
     cursor.commit()
 
+
+# -----------------------------------------
+# Endpoints
+# -----------------------------------------
 
 @app.function_name("create_item")
 @app.route(route="api/product/create", auth_level=func.AuthLevel.ANONYMOUS)
@@ -169,6 +210,7 @@ def read_item(req: func.HttpRequest) -> func.HttpResponse:
     items = [{"id": r[0], "name": r[1], "price": float(r[2])} for r in rows]
 
     return json_response({"items": items}, 200)
+
 
 @app.function_name("verify_items")
 @app.route(route="api/product/verify", auth_level=func.AuthLevel.ANONYMOUS)
