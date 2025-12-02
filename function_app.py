@@ -48,7 +48,7 @@ def ensure_table_exists(cursor):
 
 
 @app.function_name("create_item")
-@app.route(route="api/product/create", auth_level=func.AuthLevel.FUNCTION)
+@app.route(route="api/product/create", auth_level=func.AuthLevel.ANONYMOUS)
 def create_item(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("[CREATE] Request received")
 
@@ -80,7 +80,7 @@ def create_item(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.function_name("update_item")
-@app.route(route="api/product/update", auth_level=func.AuthLevel.FUNCTION)
+@app.route(route="api/product/update", auth_level=func.AuthLevel.ANONYMOUS)
 def update_item(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("[UPDATE] Request received")
 
@@ -119,7 +119,7 @@ def update_item(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.function_name("delete_item")
-@app.route(route="api/product/delete", auth_level=func.AuthLevel.FUNCTION)
+@app.route(route="api/product/delete", auth_level=func.AuthLevel.ANONYMOUS)
 def delete_item(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("[DELETE] Request received")
 
@@ -150,7 +150,7 @@ def delete_item(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.function_name("read_item")
-@app.route(route="api/product/read", auth_level=func.AuthLevel.FUNCTION)
+@app.route(route="api/product/read", auth_level=func.AuthLevel.ANONYMOUS)
 def read_item(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("[READ] Request received")
 
@@ -168,7 +168,7 @@ def read_item(req: func.HttpRequest) -> func.HttpResponse:
     return json_response({"items": items}, 200)
 
 @app.function_name("verify_items")
-@app.route(route="api/product/verify", auth_level=func.AuthLevel.FUNCTION)
+@app.route(route="api/product/verify", auth_level=func.AuthLevel.ANONYMOUS)
 def verify_items(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("[VERIFY] Request received")
 
