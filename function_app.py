@@ -22,7 +22,7 @@ def get_kv_api_key():
     Retrieves the API key from Azure Key Vault using a managed identity.
     """
     vault_url = "https://ccfinalkv.vault.azure.net/"
-    credential = DefaultAzureCredential(managed_identity_client_id=USER_ASSIGNED_MI_CLIENT_ID)
+    credential = DefaultAzureCredential()
     client = SecretClient(vault_url=vault_url, credential=credential)
     return client.get_secret("apikey").value
 
@@ -55,22 +55,14 @@ def get_connection():
 
     try:
         # Acquire Azure AD token using user-assigned Managed Identity
-        credential = DefaultAzureCredential(managed_identity_client_id=USER_ASSIGNED_MI_CLIENT_ID)
-        vault_url = "https://ccfinalkv.vault.azure.net/"
-        client = SecretClient(vault_url=vault_url, credential=credential)
-        sql_password = client.get_secret("sqlkey").value
 
         # ODBC connection string for ActiveDirectoryAccessToken
-        conn_str = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:ccfinaldb.database.windows.net,1433;Database=product;Uid=CloudSA1b36c136;" + f"Pwd={sql_password}" + ";Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
-
+        conn_str = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:ccfinaldb.database.windows.net,1433;Database=product;Uid=2357738c-c9d0-427d-a24b-19a99e528541;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;Authentication=ActiveDirectoryIntegrated"
         return pyodbc.connect(conn_str)
 
     except pyodbc.Error as e:
         logging.error(f"SQL Connection failed: {e}")
         raise
-
-
-
 
 def ensure_table_exists(cursor):
     """
