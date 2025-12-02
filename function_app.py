@@ -11,7 +11,10 @@ app = func.FunctionApp()
 
 def get_kv_api_key():
     vault_url = "https://ccfinalkv.vault.azure.net/"
-    credential = DefaultAzureCredential()
+    credential = DefaultAzureCredential(
+    managed_identity_client_id='0d12f0b9-7f4d-44e4-bbb5-eb76117b9340'
+)
+
     client = SecretClient(vault_url=vault_url, credential=credential)
     return client.get_secret("apikey").value
 
