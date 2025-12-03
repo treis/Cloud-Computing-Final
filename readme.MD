@@ -1,9 +1,3 @@
-# Introduction
-This API manages product inventory items using a serverless cloud-native architecture.  
-Stable builds appear under tagged releases; the `main` branch may change frequently.
-
----
-
 # Prerequisites
 
 ### Development Environment
