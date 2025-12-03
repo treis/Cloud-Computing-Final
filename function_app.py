@@ -6,7 +6,16 @@ import azure.functions as func
 from azure.keyvault.secrets import SecretClient
 from azure.identity import DefaultAzureCredential
 
+# -----------------------------------------
+# Function App Setup
+# -----------------------------------------
 app = func.FunctionApp()
+
+# -----------------------------------------
+# Helpers
+# -----------------------------------------
+# Use your user-assigned managed identity client ID
+USER_ASSIGNED_MI_CLIENT_ID = '0d12f0b9-7f4d-44e4-bbb5-eb76117b9340'
 
 def get_kv_api_key():
     """
@@ -41,8 +50,13 @@ def get_connection():
     """
     Connects to Azure SQL Database using user-assigned Managed Identity.
     """
+    server = "ccfinaldb.database.windows.net"
+    database = "product"
 
     try:
+        # Acquire Azure AD token using user-assigned Managed Identity
+
+        # ODBC connection string for ActiveDirectoryAccessToken
         conn_str = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:ccfinaldb.database.windows.net,1433;Database=product;Uid=2357738c-c9d0-427d-a24b-19a99e528541;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;Authentication=ActiveDirectoryIntegrated"
         return pyodbc.connect(conn_str)
 
@@ -64,7 +78,12 @@ def ensure_table_exists(cursor):
     """)
     cursor.commit()
 
-@app.function_name("create_product")
+
+# -----------------------------------------
+# Endpoints
+# -----------------------------------------
+
+@app.function_name("create_item")
 @app.route(route="api/product/create", auth_level=func.AuthLevel.ANONYMOUS)
 def create_item(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("[CREATE] Request received")
@@ -96,8 +115,8 @@ def create_item(req: func.HttpRequest) -> func.HttpResponse:
     )
 
 
-@app.function_name("product_update")
-@app.route(route="product/update", auth_level=func.AuthLevel.ANONYMOUS)
+@app.function_name("update_item")
+@app.route(route="api/product/update", auth_level=func.AuthLevel.ANONYMOUS)
 def update_item(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("[UPDATE] Request received")
 
@@ -135,8 +154,8 @@ def update_item(req: func.HttpRequest) -> func.HttpResponse:
     )
 
 
-@app.function_name("product_delete")
-@app.route(route="product/delete", auth_level=func.AuthLevel.ANONYMOUS)
+@app.function_name("delete_item")
+@app.route(route="api/product/delete", auth_level=func.AuthLevel.ANONYMOUS)
 def delete_item(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("[DELETE] Request received")
 
@@ -166,8 +185,8 @@ def delete_item(req: func.HttpRequest) -> func.HttpResponse:
     return json_response({"message": "Item deleted", "id": item_id}, 200)
 
 
-@app.function_name("product_read")
-@app.route(route="product/read", auth_level=func.AuthLevel.ANONYMOUS)
+@app.function_name("read_item")
+@app.route(route="api/product/read", auth_level=func.AuthLevel.ANONYMOUS)
 def read_item(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("[READ] Request received")
 
@@ -185,8 +204,8 @@ def read_item(req: func.HttpRequest) -> func.HttpResponse:
     return json_response({"items": items}, 200)
 
 
-@app.function_name("product_verify")
-@app.route(route="product/verify", auth_level=func.AuthLevel.ANONYMOUS)
+@app.function_name("verify_items")
+@app.route(route="api/product/verify", auth_level=func.AuthLevel.ANONYMOUS)
 def verify_items(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("[VERIFY] Request received")
 
