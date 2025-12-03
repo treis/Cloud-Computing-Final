@@ -1,4 +1,3 @@
-import os
 import json
 import logging
 import pyodbc
@@ -6,22 +5,13 @@ import azure.functions as func
 from azure.keyvault.secrets import SecretClient
 from azure.identity import DefaultAzureCredential
 
-# -----------------------------------------
-# Function App Setup
-# -----------------------------------------
 app = func.FunctionApp()
-
-# -----------------------------------------
-# Helpers
-# -----------------------------------------
-# Use your user-assigned managed identity client ID
-USER_ASSIGNED_MI_CLIENT_ID = '0d12f0b9-7f4d-44e4-bbb5-eb76117b9340'
 
 def get_kv_api_key():
     """
     Retrieves the API key from Azure Key Vault using a managed identity.
     """
-    vault_url = "https://ccfinalkv.vault.azure.net/"
+    vault_url = "https://ccfinalreiskeyvault.vault.azure.net/"
     credential = DefaultAzureCredential()
     client = SecretClient(vault_url=vault_url, credential=credential)
     return client.get_secret("apikey").value
@@ -48,16 +38,19 @@ def json_response(payload: dict, status=200):
 
 def get_connection():
     """
-    Connects to Azure SQL Database using user-assigned Managed Identity.
+    Connects to Azure SQL Database using system assigned identity.
     """
-    server = "ccfinaldb.database.windows.net"
-    database = "product"
 
     try:
-        # Acquire Azure AD token using user-assigned Managed Identity
-
-        # ODBC connection string for ActiveDirectoryAccessToken
-        conn_str = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:ccfinaldb.database.windows.net,1433;Database=product;Uid=2357738c-c9d0-427d-a24b-19a99e528541;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;Authentication=ActiveDirectoryIntegrated"
+        conn_str = (
+    "Driver={ODBC Driver 18 for SQL Server};"
+    "Server=tcp:ccfinalreistazuredb.database.windows.net,1433;"
+    "Database=product;"
+    "Authentication=ActiveDirectoryMsi;"
+    "Encrypt=yes;"
+    "TrustServerCertificate=no;"
+    "Connection Timeout=30;"
+)
         return pyodbc.connect(conn_str)
 
     except pyodbc.Error as e:
@@ -102,12 +95,15 @@ def create_item(req: func.HttpRequest) -> func.HttpResponse:
     if not name or price is None:
         return json_response({"error": "Missing required fields"}, 400)
 
-    conn = get_connection()
-    cursor = conn.cursor()
-    ensure_table_exists(cursor)
+    try: 
+        conn = get_connection()
+        cursor = conn.cursor()
+        ensure_table_exists(cursor)
+        cursor.execute("INSERT INTO products (name, price) VALUES (?, ?)", (name, price))
+        conn.commit()
+    except Exception as e:
+        return json_response({"error": str(e)})
 
-    cursor.execute("INSERT INTO products (name, price) VALUES (?, ?)", (name, price))
-    conn.commit()
 
     return json_response(
         {"message": "Item created", "name": name, "price": price},

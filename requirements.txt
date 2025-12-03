@@ -1,14 +1,26 @@
-# Uncomment to enable Azure Monitor OpenTelemetry
-# Ref: aka.ms/functions-azure-monitor-python
-# azure-monitor-opentelemetry
-
+# Azure Functions runtime
 azure-functions
-azure-keyvault-secrets
-azure-identity
-pyodbc
-fastapi
-uvicorn[standard]
-pydantic
-azure-mgmt-applicationinsights
-azure-mgmt-logic
 
+# SQL Server connectivity
+pyodbc
+
+# Azure Identity and authentication
+azure-identity
+msal
+msal-extensions
+
+# Azure Key Vault
+azure-keyvault-secrets
+
+# Cryptography and security dependencies
+cryptography
+cffi
+pycparser
+
+# HTTP requests used by Azure SDKs
+requests
+requests-oauthlib
+urllib3
+
+# Optional: typing extensions
+typing-extensions
