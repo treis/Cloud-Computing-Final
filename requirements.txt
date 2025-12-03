@@ -24,3 +24,12 @@ urllib3
 
 # Optional: typing extensions
 typing-extensions
+
+# application insights
+
+azure-functions
+opencensus-ext-azure
+opencensus-ext-logging
+opencensus-ext-requests
+pyodbc
+
